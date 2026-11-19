@@ -128,6 +128,10 @@ def test_pipeline_radar_con_descargadores_reales(tmp_path, monkeypatch, vacio):
         @staticmethod
         def now(tz): return NOW-timedelta(seconds=1)
     monkeypatch.setattr(fichas,'datetime',Clock)
+    # El reloj simulado es 2026-10-28. Fijamos una ventana de 3 meses
+    # para que el lanzamiento 2026-11-01 sea elegible independientemente
+    # de la fecha real del runner de GitHub Actions.
+    params['proximos'].update(desde='2026-10-28', hasta='2027-01-28', ventana_meses=3)
     params['radar']['preguntas_geca']={'1':'¿Qué narrativa explorar?'}
     cat=DataCatalog()
     for k,v in params.items():cat[f'params:{k}']=MemoryDataset(data=v)
