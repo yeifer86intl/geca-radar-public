@@ -11,7 +11,7 @@ from steam_pipeline.exportaciones import fecha_exacta
 CAMPOS = ["appid", "nombre", "lanzamiento_texto", "url_tienda",
           "primera_observacion_utc", "ultima_observacion_utc", "ultima_verificacion_utc",
           "proxima_verificacion_utc", "ultimo_intento_utc", "estado_pendiente", "fecha_ficha_texto",
-          "ficha_estado", "fecha_confirmada", "cambio_texto_detectado"]
+          "ficha_estado", "fecha_confirmada", "cambio_texto_detectado", "proximo_lanzamiento_ficha"]
 
 
 def cargar_historico(path='transfer/geca_steam_historico.xlsx'):
@@ -103,6 +103,8 @@ def aplicar_verificaciones(estado, verificaciones, ahora, desde, hasta, interval
             tabla.at[aid,'proxima_verificacion_utc']=(consulta + pd.Timedelta(days=intervalo)).isoformat()
         tabla.at[aid,'ultimo_intento_utc']=ahora.isoformat()
         tabla.at[aid,'ficha_estado']=estado_ficha
+        if estado_ficha=='ok':
+            tabla.at[aid,'proximo_lanzamiento_ficha']=bool(fila.get('proximo_lanzamiento') is True)
         tabla.at[aid,'fecha_ficha_texto']=texto
         tabla.at[aid,'fecha_confirmada']=fecha.isoformat() if pd.notna(fecha) else None
         tabla.at[aid,'estado_pendiente']=('promovido_activo' if confirmado else
@@ -110,3 +112,32 @@ def aplicar_verificaciones(estado, verificaciones, ahora, desde, hasta, interval
         if confirmado:
             promovidos.append({'appid':int(aid), 'fecha_confirmada':fecha, 'lanzamiento_ficha_texto':texto})
     return tabla.reset_index(drop=True),pd.DataFrame(promovidos,columns=['appid','fecha_confirmada','lanzamiento_ficha_texto'])
+
+
+def senales_editoriales_pendientes(estado, corte, preguntas, vigencia_dias=7):
+    """Señales documentadas de lanzamiento sin fecha exacta. No son juegos activos 3 meses.
+
+    Solo fichas reales verificadas (ok, coming_soon=True, <=7 días) y
+    son señales documentadas; una pregunta GECA habilita la propuesta humana.
+    """
+    columnas = ['appid','nombre','lanzamiento_texto','fecha_ficha_texto',
+                'ficha_verificada_utc','url_tienda','tipo_senal','pregunta_geca',
+                'incertidumbre_fecha','estado_pendiente','ficha_estado']
+    if estado.empty:
+        return pd.DataFrame(columns=columnas)
+    datos=estado.copy()
+    datos['appid']=pd.to_numeric(datos['appid'],errors='coerce').astype('Int64')
+    consulta=pd.to_datetime(datos['ultima_verificacion_utc'],utc=True,errors='coerce')
+    ahora=pd.Timestamp(corte)
+    if ahora.tzinfo is None: raise ValueError('corte requiere zona horaria')
+    fresco=consulta.between(ahora-pd.Timedelta(days=vigencia_dias),ahora).fillna(False)
+    proximo=datos['proximo_lanzamiento_ficha'].map(lambda v: v is True or str(v).lower() in ('true','1'))
+    sin_fecha=datos['fecha_ficha_texto'].map(fecha_exacta).isna()
+    pregunta=datos['appid'].map(preguntas)
+    elegible=(fresco & proximo & sin_fecha & datos['ficha_estado'].eq('ok'))
+    elegibles=datos.loc[elegible].copy()
+    elegibles['ficha_verificada_utc']=consulta[elegible].map(lambda x:x.isoformat())
+    elegibles['tipo_senal']='lanzamiento_fecha_imprecisa'
+    elegibles['pregunta_geca']=pregunta[elegible]
+    elegibles['incertidumbre_fecha']='Fecha exacta no confirmada; NO acreditar lanzamiento en 3 meses'
+    return elegibles.reindex(columns=columnas).sort_values('appid',kind='stable')

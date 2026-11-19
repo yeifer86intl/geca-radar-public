@@ -3,3 +3,4 @@ proximos:
   max_paginas: 2
 seleccion:
   limite_juegos: 5
+  incluir_sin_fecha: false # Pendientes por cola semanal, incluso en pruebas.

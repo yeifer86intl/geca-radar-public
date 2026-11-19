@@ -13,7 +13,7 @@ from steam_pipeline.descargas.steam_fichas_completas import descargar_fichas_com
 from steam_pipeline.descargas.steam_resenas import extraer_resenas
 from steam_pipeline.pipelines.steam.nodes import seleccionar_juegos, preparar_csv
 from steam_pipeline.ventana import resolver_ventana
-from steam_pipeline.pendientes_fecha import cargar_historico, preparar_pendientes, aplicar_verificaciones
+from steam_pipeline.pendientes_fecha import cargar_historico, preparar_pendientes, aplicar_verificaciones, senales_editoriales_pendientes
 
 
 def ahora_utc():
@@ -245,9 +245,29 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     # el analista, no nuevas reglas de exclusión. Una captura parcial se declara.
     aptos = (maestro.appid.isin(ids_validos) & maestro.candidato_recomendado
              & maestro.pregunta_geca.notna())
-    propuestas = maestro.loc[aptos].sort_values('appid', kind='stable').head(limite).copy()
-    propuestas['captura_completa'] = listado['resumen']['completo']
+    # La ventana de 3 meses limita el catálogo activo, NO la señal editorial
+    # de un título sin fecha exacta (como el caso ilustrativo del PDF).
+    # Ningún pendiente se presenta como lanzamiento confirmado en 3 meses.
+    senales_pendientes = senales_editoriales_pendientes(pendientes, corte, preguntas, edad)
+    propuestas_fechadas = maestro.loc[aptos].sort_values('appid', kind='stable').copy()
+    propuestas_fechadas['tipo_senal'] = 'lanzamiento_3_meses'
+    propuestas_fechadas['incertidumbre_fecha'] = ''
+    propuestas_fechadas['captura_completa'] = listado['resumen']['completo']
+    propuestas_pendientes = senales_pendientes.loc[senales_pendientes.pregunta_geca.notna()].rename(columns={
+        'fecha_ficha_texto':'lanzamiento_ficha_texto',
+        'ficha_verificada_utc':'ficha_consultado_utc'}).copy()
+    propuestas_pendientes['captura_completa'] = listado['resumen']['completo']
+    propuestas = pd.concat([propuestas_fechadas, propuestas_pendientes], ignore_index=True)
+    propuestas = propuestas.drop_duplicates('appid',keep='first').head(limite).copy()
     propuestas['accion_propuesta'] = 'Validar con el analista; no es una decisión editorial'
+    # Señalar atrasos sin marcar una ficha vencida como verificada.
+    pendientes_vencidos_mas_7_dias = 0
+    if not pendientes.empty:
+        vistas = pd.to_datetime(pendientes['ultima_verificacion_utc'], utc=True, errors='coerce')
+        primeras = pd.to_datetime(pendientes['primera_observacion_utc'], utc=True, errors='coerce')
+        referencia = vistas.fillna(primeras)
+        pendientes_vencidos_mas_7_dias = int((referencia.notna() &
+            (pd.Timestamp(corte)-referencia > pd.Timedelta(days=edad))).sum())
     ejecucion = corte.strftime('%Y%m%dT%H%M%S%fZ') + '-' + uuid4().hex[:8]
     salida = Path(radar['carpeta_salida']) / ejecucion; salida.mkdir(parents=True)
     catalogo_exportar = pd.concat([listado['juegos'], listado['sin_fecha']], ignore_index=True).drop_duplicates('appid')
@@ -259,7 +279,7 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     # El histórico persistente se construye con Excel al finalizar el workflow.
     # No duplicar todas las respuestas JSON en una base SQLite de cientos de MB.
     # La evidencia de la ejecución queda en maestro_completo.csv y los Excel del radar.
-    for nombre, tabla in [('pendientes_fecha', pendientes), ('fichas_pendientes', fichas_pendientes),
+    for nombre, tabla in [('pendientes_fecha', pendientes), ('senales_pendientes', senales_pendientes), ('fichas_pendientes', fichas_pendientes),
                           ('maestro_completo', maestro), ('propuestas', propuestas),
                           ('comentarios', opiniones['comentarios']), ('fichas_iniciales', capturas_iniciales)]:
         preparar_csv(tabla).to_csv(salida / f'{nombre}.csv', index=False, encoding='utf-8-sig')
@@ -271,6 +291,8 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     resumen = dict(archivos_excel=archivos_excel, ejecucion=ejecucion, corte_utc=corte.isoformat(), inicio_utc=inicio.isoformat(),
                    juegos=len(juegos), pendientes_observados=len(listado['sin_fecha']),
                    pendientes_verificados_hoy=len(cola), pendientes_vencidos_en_cola=pendientes_en_cola,
+                   pendientes_vencidos_mas_7_dias=pendientes_vencidos_mas_7_dias,
+                   senales_editoriales_fecha_imprecisa=len(senales_pendientes),
                    pendientes_intervalo_dias=edad, elegibles=int(maestro.regla_lanzamiento_pdf.sum()),
                    candidatos_recomendados=len(listado_legible),
                    criterio_lanzamiento={'coming_soon': True, 'max_edad_dias': 7},
@@ -290,8 +312,12 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
         lineas += [f"- {fila.get('nombre', fila['appid'])} ({fila['appid']}): {fila['pregunta_geca']}",
                    f"  Steam: {fila.get('url_tienda', '')}. Lanzamiento anunciado: {fila.get('lanzamiento_ficha_texto', '')}.",
                    f"  Ficha verificada: {fila.get('ficha_consultado_utc', '')}. Acción: validar con el analista."]
+        if fila.get('tipo_senal') == 'lanzamiento_fecha_imprecisa':
+            lineas.append('  FECHA IMPRECISA: NO se afirma estreno dentro de tres meses; revisar/seguir.')
         if fila.get('verificar_fecha_pasada') or fila.get('fecha_textual_distinta'):
             lineas.append('  Advertencia: revisar discrepancia de fecha en maestro_completo.csv.')
+    if pendientes_vencidos_mas_7_dias:
+        lineas.append(f'ATENCIÓN: {pendientes_vencidos_mas_7_dias} pendientes superan 7 días desde su verificación/primer avistamiento.')
     if propuestas.empty:
         lineas.append('Sin propuestas: no hay señal vigente con pregunta GECA, o max_propuestas es cero. Revisar estados y alcance de captura.')
     (salida / 'resumen.md').write_text('\n'.join(lineas), encoding='utf-8')

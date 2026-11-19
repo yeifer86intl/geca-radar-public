@@ -82,6 +82,6 @@ def test_entorno_prueba():
     loader = OmegaConfigLoader(str(ROOT / 'conf'), env='prueba', **CONFIG_LOADER_ARGS)
     params = loader['parameters']
     assert params['proximos']['max_paginas'] == 2
-    assert params['proximos']['max_paginas'] == 2
     assert params['seleccion']['limite_juegos'] == 5
-    assert params['seleccion']['incluir_sin_fecha'] is True
+    # Los juegos sin fecha se gestionan por la cola semanal, no por el extractor principal.
+    assert params['seleccion']['incluir_sin_fecha'] is False
