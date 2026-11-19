@@ -1,0 +1,16 @@
+# Ventana móvil: desde la fecha local de Caracas hasta tres meses naturales.
+# No existe límite artificial de páginas ni de juegos.
+proximos:
+  desde: null
+  hasta: null
+  ventana_meses: 3
+  anio_hasta: 2031
+  pais: "es"
+  plataforma: null
+  filtro: "comingsoon"
+  carpeta: "data/01_raw/proximos"
+  tamano_pagina: 100
+  pausa: 1.5
+  max_paginas: null
+  actualizar: false
+  guardar_csv: false

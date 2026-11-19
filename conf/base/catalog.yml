@@ -1,0 +1,108 @@
+# Catálogo completo: codificación explícita para Windows.
+steam_juegos:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/juegos.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_sin_fecha:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/sin_fecha.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_paginas:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/paginas.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_juegos_seleccionados:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/juegos_seleccionados.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_resenas:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/resenas.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_comentarios:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/comentarios.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_fichas:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/fichas.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_juegos_enriquecidos:
+  type: pandas.CSVDataset
+  filepath: data/03_primary/juegos_enriquecidos.csv
+  save_args:
+    index: false
+    encoding: utf-8-sig
+  load_args:
+    encoding: utf-8-sig
+  fs_args:
+    open_args_save:
+      mode: w
+      encoding: utf-8-sig
+      newline: ''
+steam_resumen_descarga:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/resumen_descarga.json

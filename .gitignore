@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.viz/
+.env
+conf/local/*
+!conf/local/.gitkeep
+data/
+estado/
+estado.zip
+_estado_anterior/
+
+transfer/
+estado/

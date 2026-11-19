@@ -1,0 +1,10 @@
+# Parámetros exclusivos de descargar_fichas_completas().
+fichas:
+  pais: "es"
+  idioma: "spanish"
+  carpeta: "data/01_raw/fichas"
+  pausa: 1.5
+  actualizar: false
+  limite: null                   # null = todos los IDs; 5 = primeras cinco fichas.
+
+  max_edad_dias: 7

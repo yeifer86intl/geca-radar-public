@@ -1,0 +1,11 @@
+# Parámetros exclusivos de extraer_resenas(). df_juegos lo entrega el pipeline.
+resenas:
+  idiomas: ["all"]                # Para español: ["spanish", "latam"].
+  tipo_compra: 1                  # 0 = Steam; 1 = todas; 2 = otras procedencias.
+  descargar_comentarios: false    # false = estadísticas; true = también textos.
+  paginas_por_juego: 1            # Solo para comentarios; null = todas las páginas.
+  resenas_por_pagina: 100
+  excluir_offtopic: true
+  pausa: 1.5
+  carpeta: "data/01_raw/resenas"
+  actualizar: false              # true vuelve a consultar; Steam puede cachear respuestas.

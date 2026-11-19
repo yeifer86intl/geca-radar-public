@@ -1,0 +1,5 @@
+# Kedro combina estas secciones con base. Limita coste para una primera prueba real.
+proximos:
+  max_paginas: 2
+seleccion:
+  limite_juegos: 5

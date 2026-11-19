@@ -1,0 +1,11 @@
+radar:
+  zona_horaria: America/Caracas
+  max_edad_dias: 7
+  max_propuestas: 3
+  carpeta_estado: estado
+  carpeta_salida: data/04_radar
+  # Solo una pregunta editorial explícita habilita una propuesta.
+  # Sustituye el ejemplo por IDs reales. Vacío produce cero propuestas.
+  preguntas_geca: {}
+  # preguntas_geca:
+  #   "123456": "¿Qué elementos narrativos conviene evaluar para GECA?"
