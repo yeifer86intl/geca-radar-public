@@ -79,6 +79,21 @@ def consolidate(result_dir, old_path, out_path):
     if not path.exists():
         raise RuntimeError('Falta el histórico privado: se prohíbe crear uno vacío')
     hist=frame_sheet(path,'historial'); runs_hist=frame_sheet(path,'ejecuciones')
+    # No borrar los pendientes históricos. Incorporar su estado actualizado
+    # desde la extracción diaria (si existe y fue completada).
+    from sys import path as syspath
+    src = str(Path(__file__).resolve().parents[1] / 'src')
+    if src not in syspath: syspath.insert(0,src)
+    from steam_pipeline.pendientes_fecha import cargar_historico, CAMPOS
+    pendientes_previos = cargar_historico(path)
+    pendientes_diarios = folder / 'pendientes_fecha.csv'
+    if pendientes_diarios.is_file():
+        pendientes_nuevos = pd.read_csv(pendientes_diarios, dtype={'appid':str},low_memory=False)
+        pendientes = pd.concat([pendientes_previos, pendientes_nuevos],ignore_index=True)
+        pendientes = pendientes.dropna(subset=['appid']).drop_duplicates('appid',keep='last')
+        pendientes = pendientes.reindex(columns=CAMPOS)
+    else:
+        pendientes = pendientes_previos.reindex(columns=CAMPOS)
     if not runs_hist.empty and execution in runs_hist['ejecucion'].astype(str).values:
         # Idempotente: conservar el estado si el run ya se incorporó.
         print('Ejecución ya consolidada:', execution)
@@ -131,11 +146,12 @@ def consolidate(result_dir, old_path, out_path):
         hist.to_excel(w,sheet_name='historial',index=False)
         runs_hist.to_excel(w,sheet_name='ejecuciones',index=False)
         active.to_excel(w,sheet_name='seguimiento_activo',index=False)
+        pendientes.to_excel(w,sheet_name='pendientes_fecha',index=False)
         # Alias de compatibilidad con lectores Twitch de la versión anterior.
         active.to_excel(w,sheet_name='seguimiento_6_meses',index=False)
     tmp.replace(dest)
     print(json.dumps({'juegos_vigentes':len(current),'observaciones_historicas':len(hist),
-         'ejecuciones':len(runs_hist),'seguimiento_activo':len(active),'tamano_mb':round(dest.stat().st_size/1048576,2)},ensure_ascii=False))
+         'ejecuciones':len(runs_hist),'seguimiento_activo':len(active),'pendientes_fecha':len(pendientes),'tamano_mb':round(dest.stat().st_size/1048576,2)},ensure_ascii=False))
     return str(dest)
 
 def frame_sheet(path,sheet):

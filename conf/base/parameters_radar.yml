@@ -2,6 +2,9 @@ radar:
   zona_horaria: America/Caracas
   max_edad_dias: 7
   max_propuestas: 3
+  # 8.238 pendientes / 7 días ≈ 1.177 verificaciones al día.
+  # Con 1.200 se completa un ciclo semanal si el volumen no crece.
+  max_pendientes_por_dia: 1200
   carpeta_estado: estado
   carpeta_salida: data/04_radar
   # Solo una pregunta editorial explícita habilita una propuesta.

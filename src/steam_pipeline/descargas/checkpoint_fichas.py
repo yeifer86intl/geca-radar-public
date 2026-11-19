@@ -25,7 +25,9 @@ PREFIX = "fichas"
 def _api(method, endpoint, body=None):
     token = os.environ["GECA_CHECKPOINT_TOKEN"]
     repo = os.environ["GECA_CHECKPOINT_REPO"]
-    url = f"https://api.github.com/repos/{repo}/{endpoint}"
+    url = f"https://api.github.com/repos/{repo}"
+    if endpoint:
+        url += "/" + endpoint.lstrip("/")
     payload = json.dumps(body).encode("utf-8") if body is not None else None
     req = Request(url, data=payload, method=method, headers={
         "Authorization": f"Bearer {token}",
@@ -41,6 +43,13 @@ def _api(method, endpoint, body=None):
                 return json.loads(data) if data else {}
         except HTTPError as exc:
             if exc.code == 404:
+                # GET de referencias/archivos puede no existir; el repositorio
+                # base NO debe ocultar un error de autenticación o de URL.
+                if endpoint.strip("/") == "":
+                    raise RuntimeError(
+                        f"GitHub API 404 al consultar el repositorio {repo}. "
+                        "Revisa GECA_CHECKPOINT_REPO y permisos del token."
+                    ) from exc
                 return None
             if exc.code not in (429, 500, 502, 503, 504) or attempt == 3:
                 message = exc.read().decode("utf-8", errors="replace")[:500]

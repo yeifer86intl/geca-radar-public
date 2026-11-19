@@ -13,6 +13,7 @@ from steam_pipeline.descargas.steam_fichas_completas import descargar_fichas_com
 from steam_pipeline.descargas.steam_resenas import extraer_resenas
 from steam_pipeline.pipelines.steam.nodes import seleccionar_juegos, preparar_csv
 from steam_pipeline.ventana import resolver_ventana
+from steam_pipeline.pendientes_fecha import cargar_historico, preparar_pendientes, aplicar_verificaciones
 
 
 def ahora_utc():
@@ -174,8 +175,40 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     listado = descargar_proximos_steam(**p)
     if not listado['resumen']['completo']:
         raise RuntimeError('La captura Steam fue parcial: no se publicará un catálogo incompleto. ' + str(listado['resumen']))
-    juegos = seleccionar_juegos(listado['juegos'], listado['sin_fecha'], seleccion)
+    # El universo activo excluye las fechas inciertas. Se conserva la fuente en
+    # pendientes_fecha y se consulta en lotes semanales independientes.
+    juegos = seleccionar_juegos(listado['juegos'], listado['sin_fecha'],
+                                dict(seleccion, incluir_sin_fecha=False))
     capturas_iniciales = descargar_fichas_completas(juegos, **f)
+    pendientes = cargar_historico()
+    pendientes, cola, pendientes_vencidos = preparar_pendientes(
+        listado['sin_fecha'], pendientes, ahora_utc(),
+        cupo=int(radar.get('max_pendientes_por_dia', 1200)), intervalo=edad)
+    # Un juego que Steam ya fecha explícitamente deja de estar 'pendiente',
+    # pero su registro se mantiene como evidencia histórica.
+    if not pendientes.empty and not juegos.empty:
+        ids_ya_fechados=set(juegos.appid.astype(str))
+        pendientes.loc[pendientes.appid.astype(str).isin(ids_ya_fechados),
+                       'estado_pendiente']='confirmado_en_listado'
+    fichas_pendientes = pd.DataFrame(columns=['appid','ficha_estado'])
+    if not cola.empty:
+        cola = cola.copy()
+        cola['appid'] = cola['appid'].astype('int64')
+        fichas_pendientes = descargar_fichas_completas(cola, **f)
+        pendientes, promovidos = aplicar_verificaciones(
+            pendientes, fichas_pendientes, ahora_utc(), principio, fin, edad)
+        if not promovidos.empty:
+            # Si appdetails confirma día exacto y próximo estreno, activar hoy,
+            # sin inventar fecha a partir de un texto impreciso del listado.
+            nuevas_filas=cola.loc[cola.appid.isin(promovidos.appid)].copy()
+            fechas=dict(zip(promovidos.appid,promovidos.lanzamiento_ficha_texto))
+            nuevas_filas['lanzamiento_texto']=nuevas_filas.appid.map(fechas)
+            juegos=pd.concat([juegos,nuevas_filas],ignore_index=True).drop_duplicates('appid')
+            nuevas_fichas=fichas_pendientes.loc[fichas_pendientes.appid.isin(promovidos.appid)]
+            capturas_iniciales=pd.concat([capturas_iniciales,nuevas_fichas],ignore_index=True)
+    pendientes_en_cola=max(0,pendientes_vencidos-len(cola))
+    print(f'Pendientes: {len(listado["sin_fecha"])} observados; '
+          f'{len(cola)} fichas seleccionadas hoy; {pendientes_en_cola} vencidos en cola.',flush=True)
     # El radar necesita cobertura completa, sin un límite independiente para fichas.
     if set(capturas_iniciales.appid) != set(juegos.appid):
         raise ValueError('En radar usa fichas.limite: null; limita juegos con seleccion.limite_juegos.')
@@ -204,7 +237,7 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     # El listado se filtró por la fecha exacta; confirmar de nuevo con appdetails.
     fechas_ficha = maestro['lanzamiento_ficha_texto'].map(fecha_exacta)
     ventana_valida = fechas_ficha.between(pd.Timestamp(principio), pd.Timestamp(fin)).fillna(False)
-    maestro['dentro_ventana_6_meses'] = ventana_valida
+    maestro['dentro_ventana_3_meses'] = ventana_valida
     maestro['regla_lanzamiento_pdf'] = maestro['regla_lanzamiento_pdf'] & ventana_valida
     maestro['pregunta_geca'] = maestro.appid.map(preguntas)
     maestro = evaluar_recepcion(maestro)
@@ -226,7 +259,8 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     # El histórico persistente se construye con Excel al finalizar el workflow.
     # No duplicar todas las respuestas JSON en una base SQLite de cientos de MB.
     # La evidencia de la ejecución queda en maestro_completo.csv y los Excel del radar.
-    for nombre, tabla in [('maestro_completo', maestro), ('propuestas', propuestas),
+    for nombre, tabla in [('pendientes_fecha', pendientes), ('fichas_pendientes', fichas_pendientes),
+                          ('maestro_completo', maestro), ('propuestas', propuestas),
                           ('comentarios', opiniones['comentarios']), ('fichas_iniciales', capturas_iniciales)]:
         preparar_csv(tabla).to_csv(salida / f'{nombre}.csv', index=False, encoding='utf-8-sig')
     # Universo elegible, sin límite de tres. Solo propuestas.csv es el resumen.
@@ -235,7 +269,9 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
         salida / 'maestro.csv', index=False, encoding='utf-8-sig', sep=';'
     )
     resumen = dict(archivos_excel=archivos_excel, ejecucion=ejecucion, corte_utc=corte.isoformat(), inicio_utc=inicio.isoformat(),
-                   juegos=len(juegos), elegibles=int(maestro.regla_lanzamiento_pdf.sum()),
+                   juegos=len(juegos), pendientes_observados=len(listado['sin_fecha']),
+                   pendientes_verificados_hoy=len(cola), pendientes_vencidos_en_cola=pendientes_en_cola,
+                   pendientes_intervalo_dias=edad, elegibles=int(maestro.regla_lanzamiento_pdf.sum()),
                    candidatos_recomendados=len(listado_legible),
                    criterio_lanzamiento={'coming_soon': True, 'max_edad_dias': 7},
                    resenas_solo_informativas=True,

@@ -1,5 +1,5 @@
 # Verificar también las fechas inciertas (por ejemplo, «2027»).
 # Se guardan como pendientes, NUNCA como estrenos confirmados dentro de la ventana.
 seleccion:
-  incluir_sin_fecha: true
+  incluir_sin_fecha: false
   limite_juegos: null
