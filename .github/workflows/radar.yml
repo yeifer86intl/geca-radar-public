@@ -23,9 +23,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      GECA_CHECKPOINT_TOKEN: ${{ github.token }}
-      GECA_CHECKPOINT_REPO: ${{ github.repository }}
-      GECA_CHECKPOINT_BATCH: "100"
       KEDRO_DISABLE_TELEMETRY: "1"
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +48,10 @@ jobs:
       - name: Copia de seguridad antes de procesar
         run: cp transfer/geca_steam_historico.xlsx transfer/geca_steam_anterior.xlsx
       - name: Ejecutar extracción Steam
+        env:
+          GECA_CHECKPOINT_TOKEN: ${{ github.token }}
+          GECA_CHECKPOINT_REPO: ${{ github.repository }}
+          GECA_CHECKPOINT_BATCH: "100"
         run: python -m kedro run --pipeline radar
       - name: Consolidar catálogo sin borrar históricos
         run: python scripts/build_light_catalog.py --results data/04_radar --previous transfer/geca_steam_historico.xlsx --out transfer/geca_steam_historico.xlsx

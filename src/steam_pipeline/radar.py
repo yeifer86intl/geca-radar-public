@@ -197,6 +197,10 @@ def ejecutar_radar(proximos, seleccion, fichas, resenas, radar):
     opiniones = extraer_resenas(juegos, **r)
     corte = ahora_utc()  # Se fija DESPUÉS de las consultas y se persiste.
     maestro = integrar(juegos, definitivas, opiniones['resumen'], opiniones['comentarios'], corte, edad)
+    # Una ficha sin fecha, o un listado vacío, no tiene esta columna.
+    # Crearla como dato ausente sin inventar fechas.
+    if 'lanzamiento_ficha_texto' not in maestro.columns:
+        maestro['lanzamiento_ficha_texto'] = pd.Series(pd.NA, index=maestro.index, dtype='object')
     # El listado se filtró por la fecha exacta; confirmar de nuevo con appdetails.
     fechas_ficha = maestro['lanzamiento_ficha_texto'].map(fecha_exacta)
     ventana_valida = fechas_ficha.between(pd.Timestamp(principio), pd.Timestamp(fin)).fillna(False)

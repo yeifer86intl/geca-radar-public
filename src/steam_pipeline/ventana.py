@@ -1,4 +1,4 @@
-"""Ventana de seis meses naturales, calculada en la zona horaria de Venezuela."""
+"""Ventana configurable de meses naturales en la zona horaria de Venezuela."""
 import calendar
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -21,5 +21,5 @@ def resolver_ventana(desde=None, hasta=None, ventana_meses=6, *, hoy=None):
     principio = date.fromisoformat(str(desde)) if desde is not None else dia
     fin = date.fromisoformat(str(hasta)) if hasta is not None else sumar_meses(principio, ventana_meses)
     if fin < principio:
-        raise ValueError("hasta es anterior a desde")
+        raise ValueError("hasta debe ser posterior o igual a desde")
     return principio, fin
