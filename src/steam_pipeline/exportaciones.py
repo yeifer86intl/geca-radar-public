@@ -1,4 +1,4 @@
-"""Exportaciones compatibles con las columnas de los tres Excel de referencia."""
+"""Exportaciones CSV.GZ compatibles con las columnas de referencia."""
 import json
 from datetime import date
 from pathlib import Path
@@ -83,24 +83,44 @@ def construir_formatos(listado, fichas, proximos):
 
 
 def exportar_formatos(listado, fichas, proximos, salida):
-    """Genera Sheet1 en tres .xlsx. Requiere openpyxl instalado en el proyecto."""
+    """Exporta los tres formatos a CSV.GZ sin alterar los datos originales.
+
+    Conserva la firma y las claves de retorno utilizadas por radar_diario.
+    Se escriben archivos temporales y solo se publican tras completarse.
+    """
+    import csv
+    import os
+    import tempfile
+
     salida = Path(salida)
     salida.mkdir(parents=True, exist_ok=True)
     tablas = construir_formatos(listado, fichas, proximos)
+    archivos = {}
+
     for nombre, tabla in tablas.items():
         tabla = tabla.copy()
         for columna in tabla:
             tabla[columna] = tabla[columna].map(
                 lambda x: repr(x) if isinstance(x, (list, dict)) else x
             )
-        ruta = salida / f'{nombre}.xlsx'
-        with pd.ExcelWriter(ruta, engine='openpyxl', date_format='YYYY-MM-DD',
-                            datetime_format='YYYY-MM-DD HH:MM:SS') as writer:
-            tabla.to_excel(writer, sheet_name='Sheet1', index=False)
-            # Los textos externos se conservan como texto, incluso si empiezan por '='.
-            hoja = writer.sheets['Sheet1']
-            for fila in hoja.iter_rows(min_row=2):
-                for celda in fila:
-                    if celda.data_type == 'f':
-                        celda.data_type = 's'
-    return {nombre: str(salida / f'{nombre}.xlsx') for nombre in tablas}
+        ruta = salida / f"{nombre}.csv.gz"
+        # Temporal en la misma carpeta para que os.replace sea atómico.
+        fd, temporal = tempfile.mkstemp(
+            prefix=f".{nombre}.", suffix=".csv.gz", dir=salida
+        )
+        os.close(fd)
+        try:
+            tabla.to_csv(
+                temporal,
+                index=False,
+                encoding="utf-8",
+                compression="gzip",
+                quoting=csv.QUOTE_MINIMAL,
+            )
+            os.replace(temporal, ruta)
+        finally:
+            if os.path.exists(temporal):
+                os.unlink(temporal)
+        archivos[nombre] = str(ruta)
+
+    return archivos

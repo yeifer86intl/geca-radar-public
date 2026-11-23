@@ -1,7 +1,7 @@
 name: GECA Radar diario (histórico público)
 on:
   schedule:
-    - cron: "0 13 * * *" # 09:00 Venezuela (UTC-4) = 13:00 UTC
+    - cron: "0 11 * * *" # 07:00 Venezuela (UTC-4) = 11:00 UTC
   workflow_dispatch:
     inputs:
       inicializar_desde_respaldo:
@@ -55,6 +55,21 @@ jobs:
         run: python -m kedro run --pipeline radar
       - name: Consolidar catálogo sin borrar históricos
         run: python scripts/build_light_catalog.py --results data/04_radar --previous transfer/geca_steam_historico.xlsx --out transfer/geca_steam_historico.xlsx
+      - name: Exportar solo cambios Steam
+        run: |
+          python scripts/export_steam_delta.py \
+            --before transfer/geca_steam_anterior.xlsx \
+            --after transfer/geca_steam_historico.xlsx \
+            --repo "${{ github.repository }}" \
+            --run "${{ github.run_id }}" \
+            --out outputs/delta/steam_delta.jsonl.gz
+      - name: Publicar incremento Steam
+        uses: actions/upload-artifact@v4
+        with:
+          name: geca-steam-delta
+          path: outputs/delta/steam_delta.jsonl.gz
+          if-no-files-found: error
+          retention-days: 7
       - name: Publicar catálogo público persistente
         run: python scripts/publish_public_state.py
       - name: Publicar catálogo para Twitch
@@ -69,7 +84,8 @@ jobs:
         with:
           name: resultados-radar
           path: |
-            data/04_radar/**/*.xlsx
+            data/04_radar/**/*.csv.gz
+            data/04_radar/**/*.csv
             data/04_radar/**/resumen.json
             data/04_radar/**/resumen.md
           retention-days: 30
