@@ -1,49 +1,44 @@
-"""Guarda el histórico públicamente en un release del mismo repositorio.
-
-Hace copia inmutable del respaldo anterior antes de actualizar estado-geca.
-Los releases son públicos: no subir datos privados ni secretos.
-"""
-import os
-import subprocess
+"""Steam: solo dos activos en UN release, no cientos de backups completos."""
+import hashlib, os, subprocess, tempfile
 from pathlib import Path
 import pandas as pd
 
-FILE="geca_steam_historico.xlsx"
+TAG='estado-geca'
+
+def gh(*args):
+    p=subprocess.run(['gh',*args],capture_output=True,text=True,encoding='utf-8')
+    if p.returncode:raise RuntimeError('GitHub CLI: '+' '.join(args)+'\n'+p.stderr)
+    return p.stdout
+
+def sha(path):
+    h=hashlib.sha256()
+    with open(path,'rb') as f:
+        for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+    return h.hexdigest()
 
 def counts(p):
-    with pd.ExcelFile(p, engine="openpyxl") as book:
-        return tuple(len(pd.read_excel(book, sheet_name=s, usecols=["appid"] if s != "ejecuciones" else None)) for s in ("vigente", "historial", "ejecuciones"))
-
-def call(*args, allow_fail=False):
-    env = os.environ.copy()
-    env["GH_TOKEN"]=os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN", "")
-    proc=subprocess.run(["gh",*args],env=env,text=True,capture_output=True)
-    if proc.returncode and not allow_fail:
-        raise RuntimeError(f"GitHub CLI falló: {proc.stderr[:400]}")
-    return proc
+    with pd.ExcelFile(p,engine='openpyxl') as w:
+        return tuple(len(pd.read_excel(w,sheet_name=s,usecols=['appid'] if s!='ejecuciones' else None)) for s in ('vigente','historial','ejecuciones'))
 
 def main():
-    repo=os.environ.get("GITHUB_REPOSITORY","")
-    run=os.environ.get("GITHUB_RUN_ID","")
-    if not repo or not run:
-        raise RuntimeError("Se necesitan GITHUB_REPOSITORY y GITHUB_RUN_ID")
-    before=Path('transfer/geca_steam_anterior.xlsx')
-    after=Path('transfer') / FILE
-    if not before.is_file() or not after.is_file():
-        raise RuntimeError("Falta copia anterior o catálogo nuevo")
-    old,new=counts(before),counts(after)
-    if any(n<o for n,o in zip(new,old)):
-        raise RuntimeError(f"Prohibido publicar menos datos: {old} -> {new}")
-    # Publicar primero una copia inmutable para que siempre haya recuperación posible.
-    backup_tag='respaldo-geca-'+run
-    call('release','create',backup_tag,str(before),'--repo',repo,
-         '--title',f'Respaldo previo a {run}', '--notes','Respaldo inmutable del catálogo anterior.')
-    if call('release','view','estado-geca','--repo',repo,allow_fail=True).returncode:
-        call('release','create','estado-geca',str(after),'--repo',repo,
-             '--title','GECA estado histórico actual', '--notes','Estado ligero compartido con Twitch.')
-    else:
-        call('release','upload','estado-geca',str(after),'--repo',repo,'--clobber')
-    print(f"Publicado catálogo público: {old} -> {new}",flush=True)
+    repo=os.environ['GITHUB_REPOSITORY']
+    old=Path('transfer/geca_steam_anterior.xlsx')
+    current=Path('transfer/geca_steam_historico.xlsx')
+    if not old.is_file() or not current.is_file():raise RuntimeError('Falta original o actualización')
+    if any(a<b for a,b in zip(counts(current),counts(old))):raise RuntimeError('Pérdida de filas: no publicar')
+    q=subprocess.run(['gh','release','view',TAG,'-R',repo],capture_output=True)
+    if q.returncode:
+        gh('release','create',TAG,'-R',repo,'--title','GECA Steam estado vigente',
+           '--notes','Solo estado vigente y copia de seguridad inmediata.','--latest=false')
+    # Publicar PRIMERO una copia verificada antes de modificar el estado actual.
+    gh('release','upload',TAG,str(old),'-R',repo,'--clobber')
+    with tempfile.TemporaryDirectory() as tmp:
+        gh('release','download',TAG,'-R',repo,'--pattern',old.name,'--dir',tmp)
+        if sha(Path(tmp)/old.name)!=sha(old):raise RuntimeError('Backup previo no verificable')
+    gh('release','upload',TAG,str(current),'-R',repo,'--clobber')
+    with tempfile.TemporaryDirectory() as tmp:
+        gh('release','download',TAG,'-R',repo,'--pattern',current.name,'--dir',tmp)
+        if sha(Path(tmp)/current.name)!=sha(current):raise RuntimeError('Estado nuevo no verificable')
+    print('Steam publicado: solo respaldo previo + estado actual')
 
-if __name__=='__main__':
-    main()
+if __name__=='__main__':main()

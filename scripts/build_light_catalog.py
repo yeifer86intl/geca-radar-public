@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 import calendar
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 FIELDS = ['appid','nombre','lanzamiento','coming_soon','ficha_estado','ficha_verificada_utc',
           'resenas_total','resenas_positivas','resenas_negativas','porcentaje_positivas',
@@ -60,6 +61,22 @@ def _active_sheet(current, now=None):
     active['ventana_desde'] = str(start)
     active['ventana_hasta'] = str(end)
     return active
+
+
+def excel_safe(frame):
+    """Limpia solo el formato de intercambio XLSX; los CSV conservan el original."""
+    frame = frame.copy()
+    for column in frame.select_dtypes(include=['object', 'string']).columns:
+        def clean(value):
+            if not isinstance(value, str):
+                return value
+            value = ILLEGAL_CHARACTERS_RE.sub('', value)
+            # Evita la inyección de fórmulas cuando el origen es texto de Steam.
+            if value.startswith(('=', '+', '-', '@')):
+                value = "'" + value
+            return value[:32767]
+        frame[column] = frame[column].map(clean)
+    return frame
 
 
 def consolidate(result_dir, old_path, out_path):
@@ -142,13 +159,13 @@ def consolidate(result_dir, old_path, out_path):
     if current['appid'].nunique() < 4323 or len(hist) < 22283 or len(runs_hist) < 21:
         raise RuntimeError('El nuevo catálogo no conserva la auditoría mínima de 4.323 juegos, 22.283 observaciones y 21 ejecuciones')
     with pd.ExcelWriter(tmp,engine='openpyxl') as w:
-        current.to_excel(w,sheet_name='vigente',index=False)
-        hist.to_excel(w,sheet_name='historial',index=False)
-        runs_hist.to_excel(w,sheet_name='ejecuciones',index=False)
-        active.to_excel(w,sheet_name='seguimiento_activo',index=False)
-        pendientes.to_excel(w,sheet_name='pendientes_fecha',index=False)
+        excel_safe(current).to_excel(w,sheet_name='vigente',index=False)
+        excel_safe(hist).to_excel(w,sheet_name='historial',index=False)
+        runs_excel_safe(hist).to_excel(w,sheet_name='ejecuciones',index=False)
+        excel_safe(active).to_excel(w,sheet_name='seguimiento_activo',index=False)
+        excel_safe(pendientes).to_excel(w,sheet_name='pendientes_fecha',index=False)
         # Alias de compatibilidad con lectores Twitch de la versión anterior.
-        active.to_excel(w,sheet_name='seguimiento_6_meses',index=False)
+        excel_safe(active).to_excel(w,sheet_name='seguimiento_6_meses',index=False)
     tmp.replace(dest)
     print(json.dumps({'juegos_vigentes':len(current),'observaciones_historicas':len(hist),
          'ejecuciones':len(runs_hist),'seguimiento_activo':len(active),'pendientes_fecha':len(pendientes),'tamano_mb':round(dest.stat().st_size/1048576,2)},ensure_ascii=False))

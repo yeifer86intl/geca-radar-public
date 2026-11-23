@@ -60,7 +60,7 @@ def test_propuestas_sin_resenas_y_reposicion(tmp_path, monkeypatch, completo, es
     assert p.appid.tolist() == [2, 3, 4]  # El 4 repone al 1, publicado al refrescar.
     assert p.captura_completa.eq(completo).all()
     assert len(pd.read_csv(salida / 'maestro.csv', sep=';')) == 4
-    assert all((salida / name).is_file() for name in ['catalogo_new.xlsx', 'fichas_new.xlsx', 'verificacion.xlsx'])
+    assert all((salida / name).is_file() for name in ['catalogo_new.csv.gz', 'fichas_new.csv.gz', 'verificacion.csv.gz'])
     assert 'ADVERTENCIA: captura parcial' not in (salida / 'resumen.md').read_text()
 
 def test_fechas_son_advertencias_normalizadas():

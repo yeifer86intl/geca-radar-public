@@ -13,7 +13,7 @@ def test_workflow_no_expone_token_checkpoint_a_pytest():
     cabecera, ejecucion = wf.split("      - name: Ejecutar extracción Steam", 1)
     assert "GECA_CHECKPOINT_TOKEN:" not in cabecera
     assert "GECA_CHECKPOINT_TOKEN:" in ejecucion
-    assert 'cron: "0 13 * * *"' in wf
+    assert 'cron: "0 11 * * *"' in wf  # 07:00 Venezuela
 
 def test_serie_fecha_ausente_no_inventa_fecha():
     from steam_pipeline.exportaciones import fecha_exacta
