@@ -1,4 +1,4 @@
-"""Exportaciones CSV.GZ compatibles con las columnas de referencia."""
+"""Exportaciones compatibles con las columnas de los tres Excel de referencia."""
 import json
 from datetime import date
 from pathlib import Path
@@ -10,6 +10,15 @@ FICHAS = ['', 'appid', 'region', 'idioma', 'estado_consulta', 'error_consulta', 
 CATALOGO = ['', 'appid', 'nombre_buscador', 'lanzamiento_buscador', 'url_tienda', 'region', 'idioma', 'filtro_buscador', 'buscador_consultado_utc', 'fecha_buscador']
 
 VERIFICACION = ['', 'appid', 'nombre_buscador', 'lanzamiento_buscador', 'url_tienda', 'region', 'idioma', 'filtro_buscador', 'buscador_consultado_utc', 'fecha_buscador', 'estado_consulta', 'error_consulta', 'consultado_utc', 'steam.type', 'steam.name', 'steam.steam_appid', 'steam.required_age', 'steam.is_free', 'steam.detailed_description', 'steam.about_the_game', 'steam.short_description', 'steam.supported_languages', 'steam.header_image', 'steam.capsule_image', 'steam.capsule_imagev5', 'steam.website', 'steam.pc_requirements.minimum', 'steam.mac_requirements', 'steam.linux_requirements', 'steam.developers', 'steam.publishers', 'steam.package_groups', 'steam.platforms.windows', 'steam.platforms.mac', 'steam.platforms.linux', 'steam.categories', 'steam.genres', 'steam.screenshots', 'steam.movies', 'steam.release_date.coming_soon', 'steam.release_date.date', 'steam.support_info.url', 'steam.support_info.email', 'steam.background', 'steam.background_raw', 'steam.content_descriptors.ids', 'steam.content_descriptors.notes', 'steam.ratings.dejus.rating_generated', 'steam.ratings.dejus.rating', 'steam.ratings.dejus.required_age', 'steam.ratings.dejus.banned', 'steam.ratings.dejus.use_age_gate', 'steam.ratings.dejus.descriptors', 'steam.ratings.steam_germany.rating_generated', 'steam.ratings.steam_germany.rating', 'steam.ratings.steam_germany.required_age', 'steam.ratings.steam_germany.banned', 'steam.ratings.steam_germany.use_age_gate', 'steam.ratings.steam_germany.descriptors', 'steam.pc_requirements.recommended', 'steam.mac_requirements.minimum', 'steam.mac_requirements.recommended', 'steam.linux_requirements.minimum', 'steam.linux_requirements.recommended', 'steam.price_overview.currency', 'steam.price_overview.initial', 'steam.price_overview.final', 'steam.price_overview.discount_percent', 'steam.price_overview.initial_formatted', 'steam.price_overview.final_formatted', 'steam.packages', 'steam.achievements.total', 'steam.achievements.highlighted', 'steam.ratings.igrs.rating_generated', 'steam.ratings.igrs.rating', 'steam.ratings.igrs.required_age', 'steam.ratings.igrs.banned', 'steam.ratings.igrs.use_age_gate', 'steam.ratings.igrs.descriptors', 'steam.dlc', 'steam.reviews', 'steam.controller_support', 'lanzamiento_texto', 'fecha_lanzamiento', 'estado_lanzamiento', 'coincide_filtro']
+
+import re
+_CARACTERES_INVALIDOS_XLSX = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+
+
+def limpiar_excel(texto: str) -> str:
+    """Elimina únicamente controles XML ilegales, preservando saltos de línea."""
+    return _CARACTERES_INVALIDOS_XLSX.sub('', texto)
+
 
 def fecha_exacta(texto):
     if pd.isna(texto):
@@ -83,44 +92,29 @@ def construir_formatos(listado, fichas, proximos):
 
 
 def exportar_formatos(listado, fichas, proximos, salida):
-    """Exporta los tres formatos a CSV.GZ sin alterar los datos originales.
-
-    Conserva la firma y las claves de retorno utilizadas por radar_diario.
-    Se escriben archivos temporales y solo se publican tras completarse.
-    """
-    import csv
-    import os
-    import tempfile
-
+    """Genera Sheet1 en tres .xlsx. Requiere openpyxl instalado en el proyecto."""
     salida = Path(salida)
     salida.mkdir(parents=True, exist_ok=True)
     tablas = construir_formatos(listado, fichas, proximos)
-    archivos = {}
-
     for nombre, tabla in tablas.items():
         tabla = tabla.copy()
         for columna in tabla:
             tabla[columna] = tabla[columna].map(
                 lambda x: repr(x) if isinstance(x, (list, dict)) else x
             )
-        ruta = salida / f"{nombre}.csv.gz"
-        # Temporal en la misma carpeta para que os.replace sea atómico.
-        fd, temporal = tempfile.mkstemp(
-            prefix=f".{nombre}.", suffix=".csv.gz", dir=salida
-        )
-        os.close(fd)
-        try:
-            tabla.to_csv(
-                temporal,
-                index=False,
-                encoding="utf-8",
-                compression="gzip",
-                quoting=csv.QUOTE_MINIMAL,
-            )
-            os.replace(temporal, ruta)
-        finally:
-            if os.path.exists(temporal):
-                os.unlink(temporal)
-        archivos[nombre] = str(ruta)
-
-    return archivos
+        # Solo la copia para Excel: elimina caracteres de control inválidos.
+        # No modifica la evidencia histórica original.
+        tabla = tabla.apply(lambda columna: columna.map(
+            lambda valor: limpiar_excel(valor) if isinstance(valor, str) else valor
+        ))
+        ruta = salida / f'{nombre}.xlsx'
+        with pd.ExcelWriter(ruta, engine='openpyxl', date_format='YYYY-MM-DD',
+                            datetime_format='YYYY-MM-DD HH:MM:SS') as writer:
+            tabla.to_excel(writer, sheet_name='Sheet1', index=False)
+            # Los textos externos se conservan como texto, incluso si empiezan por '='.
+            hoja = writer.sheets['Sheet1']
+            for fila in hoja.iter_rows(min_row=2):
+                for celda in fila:
+                    if celda.data_type == 'f':
+                        celda.data_type = 's'
+    return {nombre: str(salida / f'{nombre}.xlsx') for nombre in tablas}
