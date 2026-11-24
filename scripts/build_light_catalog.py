@@ -161,7 +161,7 @@ def consolidate(result_dir, old_path, out_path):
     with pd.ExcelWriter(tmp,engine='openpyxl') as w:
         excel_safe(current).to_excel(w,sheet_name='vigente',index=False)
         excel_safe(hist).to_excel(w,sheet_name='historial',index=False)
-        runs_excel_safe(hist).to_excel(w,sheet_name='ejecuciones',index=False)
+        excel_safe(runs_hist).to_excel(w,sheet_name='ejecuciones',index=False)
         excel_safe(active).to_excel(w,sheet_name='seguimiento_activo',index=False)
         excel_safe(pendientes).to_excel(w,sheet_name='pendientes_fecha',index=False)
         # Alias de compatibilidad con lectores Twitch de la versión anterior.
